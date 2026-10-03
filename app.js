@@ -39,7 +39,7 @@ function home(){
    <div class="spacer"></div><div class="small">Total accessible cash</div><div class="money">${money(available())}</div>
    <div class="grid2">
     <div class="metric"><span class="small">Chequing</span><b>${money(state.accounts.chequing)}</b></div>
-    <div class="metric"><span class="small">Savings floor</span><b>${money(state.accounts.savings)}</b></div>
+    <div class="metric"><span class="small">Savings minimum</span><b>${money(state.accounts.savings)}</b></div>
    </div>
  </div>
  <div class="card blue"><div class="row"><div><div class="eyebrow">Next action</div><div class="title" style="margin:4px 0">Fund Shakepay</div><div class="small">${money(Math.max(0,419.23-state.accounts.shakepay))} still needed for phone + insurance.</div></div><span class="pill bluepill">Priority</span></div></div>
@@ -56,7 +56,7 @@ function accounts(){
  const rows=[
  ["cash","Cash","Emergency flexibility • don't automatically use for debt",state.accounts.cash],
  ["chequing","Chequing","Day-to-day buffer",state.accounts.chequing],
- ["savings","Savings","Protected floor: $100",state.accounts.savings],
+ ["savings","Savings","Protected minimum: $1,000",state.accounts.savings],
  ["wise","Wise (Spending)","Weekly discretionary spending",state.accounts.wise],
  ["rent","Rent / Envision","Rent bucket",state.accounts.rent],
  ["shakepay","Shakepay","Phone + insurance target: $419.23",state.accounts.shakepay],
@@ -104,26 +104,69 @@ function bind(){
 function runPay(){
  const n=parseFloat(document.getElementById("payAmount").value);
  const out=document.getElementById("payResult");
- if(!Number.isFinite(n)||n<=0){out.innerHTML=`<div class="card"><div class="notice">Enter the actual paycheque amount first.</div></div>`;return}
+ if(!Number.isFinite(n)||n<=0){
+   out.innerHTML=`<div class="card"><div class="notice">Enter the actual paycheque amount first.</div></div>`;
+   return;
+ }
+
  let remaining=n, lines=[];
- const add=(label,amt)=>{if(amt<=0)return;amt=Math.min(amt,remaining);remaining-=amt;lines.push([label,amt])};
- add("Fund Shakepay to $419.23",Math.max(0,419.23-state.accounts.shakepay));
- add("Mastercard minimum payment",Math.min(50,state.accounts.mastercard));
- add("Weekly Wise spending",Math.min(150,state.weeklyBudget-state.spentThisWeek));
- add("Protect savings floor",Math.max(0,100-state.accounts.savings));
- const result=`<div class="card"><div class="eyebrow">Your plan</div><div class="title">${money(n)} paycheque</div>${lines.map(x=>`<div class="expense"><span>${x[0]}</span><b>${money(x[1])}</b></div>`).join("")}<div class="expense"><span>Remaining → RBC Visa</span><b>${money(remaining)}</b></div><button class="btn" id="applyPay">Apply this plan</button></div>`;
+ const add=(label,amt,destination,type)=> {
+   if(amt<=0) return;
+   amt=Math.min(amt,remaining);
+   remaining-=amt;
+   lines.push({label,amt,destination,type});
+ };
+
+ // Priority order: essential bill bucket -> locked Mastercard minimum ->
+ // weekly spending -> savings minimum -> remaining debt target.
+ add("Fund Shakepay to $419.23",Math.max(0,419.23-state.accounts.shakepay),"Shakepay","transfer");
+ add("Mastercard minimum payment",Math.min(50,state.accounts.mastercard),"Mastercard","debt");
+ add("Weekly Wise spending",Math.min(150,Math.max(0,state.weeklyBudget-state.spentThisWeek)),"Wise","transfer");
+ add("Build Savings to $1,000",Math.max(0,1000-state.accounts.savings),"Savings","transfer");
+ if(remaining>0) add("Remaining → RBC Visa",remaining,"RBC Visa","debt");
+
+ const result=`<div class="card">
+   <div class="eyebrow">Your plan</div>
+   <div class="title">${money(n)} paycheque</div>
+   ${lines.map(x=>`<div class="expense"><span>${x.label}<br><span class="small">→ ${x.destination}</span></span><b>${money(x.amt)}</b></div>`).join("")}
+   <div class="notice" style="margin-top:12px">When you apply this plan, the money is routed into these destinations. It will not sit in Chequing as unallocated money.</div>
+   <button class="btn" id="applyPay">Apply this plan</button>
+ </div>`;
  out.innerHTML=result;
+
  document.getElementById("applyPay").onclick=()=>{
-   state.accounts.chequing+=n;
-   lines.forEach(([label,amt])=>{
-     if(label.startsWith("Fund Shakepay")){state.accounts.chequing-=amt;state.accounts.shakepay+=amt}
-     else if(label.startsWith("Mastercard")){state.accounts.chequing-=amt;state.accounts.mastercard=Math.max(0,state.accounts.mastercard-amt)}
-     else if(label.startsWith("Weekly")){state.accounts.chequing-=amt;state.accounts.wise+=amt}
-     else if(label.startsWith("Protect")){state.accounts.chequing-=amt;state.accounts.savings+=amt}
+   // Deposit the actual paycheque into Chequing first, then immediately
+   // route each allocation out of Chequing into its destination.
+   state.accounts.chequing += n;
+
+   lines.forEach(x=>{
+     state.accounts.chequing -= x.amt;
+
+     if(x.destination==="Shakepay"){
+       state.accounts.shakepay += x.amt;
+     } else if(x.destination==="Wise"){
+       state.accounts.wise += x.amt;
+     } else if(x.destination==="Savings"){
+       state.accounts.savings += x.amt;
+     } else if(x.destination==="Mastercard"){
+       state.accounts.mastercard=Math.max(0,state.accounts.mastercard-x.amt);
+     } else if(x.destination==="RBC Visa"){
+       state.accounts.rbc=Math.max(0,state.accounts.rbc-x.amt);
+     }
    });
-   state.accounts.chequing-=remaining;state.accounts.rbc=Math.max(0,state.accounts.rbc-remaining);
-   state.incomeLog.push({type:"paycheque",amount:n,date:new Date().toLocaleDateString("en-CA")});
-   save();render();
+
+   // Keep floating-point noise out of the displayed balance.
+   state.accounts.chequing=Math.round(state.accounts.chequing*100)/100;
+
+   state.incomeLog.push({
+     type:"paycheque",
+     amount:n,
+     allocations:lines.map(x=>({destination:x.destination,amount:x.amt})),
+     date:new Date().toLocaleDateString("en-CA")
+   });
+
+   save();
+   render();
  };
 }
 function runTips(){

@@ -1,32 +1,47 @@
 # RESET — Finance PWA
 
-Black/white mobile-first personal finance app with a small blue accent.
+Mobile-first personal finance PWA with a black/white UI and small blue accent.
 
-## PWA features
-- Installable on iPhone/iPad and Android
-- Standalone app window
-- App icon
-- Offline cache after first successful load
-- Local data persistence via localStorage
-- No financial data is sent to a server
+## Current rules
+- Savings minimum: **$1,000**
+- Mastercard stays locked
+- Payday Wizard uses the actual paycheque amount
+- Payday plan priority: Shakepay → Mastercard minimum → Wise weekly spending → Savings to $1,000 → remaining to RBC Visa
+- Applying a payday plan actually routes the money to those destinations instead of leaving it sitting in Chequing
+- Tip Wizard funds Shakepay first when needed, then RBC Visa
+- Data is stored locally in the browser
 
-## Important
-A PWA must be served from **HTTPS** (or localhost). Opening `index.html` directly from the iPhone Files app can show the page but will not give Safari the full PWA install/offline behavior.
+## GitHub Pages upload
 
-## iPhone installation
-1. Put this folder on an HTTPS static host such as GitHub Pages, Cloudflare Pages, Netlify, or another HTTPS web host.
-2. Open the site's `index.html` URL in **Safari**.
-3. Tap **Share**.
-4. Tap **Add to Home Screen**.
-5. Launch RESET from the new Home Screen icon.
+Upload the **contents of this folder** to the root of your GitHub Pages repository. Do not upload only the ZIP.
 
-## Local testing
-From a computer, serve this folder with any local HTTP server and open it in a browser. The service worker requires HTTP(S), not `file://`.
+The root should look like:
 
-## Included
-- index.html
-- styles.css
-- app.js
-- manifest.json
-- sw.js
-- icons/
+    index.html
+    app.js
+    styles.css
+    manifest.json
+    sw.js
+    README.md
+    icons/
+      icon-192.png
+      icon-512.png
+      apple-touch-icon.png
+
+Then in GitHub:
+1. Open your repository.
+2. Click **Add file → Upload files**.
+3. Upload `index.html`, `app.js`, `styles.css`, `manifest.json`, `sw.js`, and the `icons` folder/files.
+4. Commit the changes.
+5. Go to **Settings → Pages**.
+6. Under **Build and deployment**, choose **Deploy from a branch**.
+7. Choose your branch (usually `main`) and folder `/ (root)`.
+8. Save.
+9. Open the GitHub Pages URL in Safari.
+10. Use **Share → Add to Home Screen**.
+
+For your existing `999salem.github.io` site, if RESET is replacing the current root site, upload these files to the repository root. If you want RESET at a subfolder such as `/RESET/`, put all these files inside a `RESET` folder instead.
+
+## PWA requirement
+
+The service worker requires HTTPS (GitHub Pages provides this). Opening `index.html` directly from Files will not give the full PWA installation behavior.
