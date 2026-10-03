@@ -9,6 +9,8 @@ Mobile-first personal finance PWA with a black/white UI and small blue accent.
 - Payday plan priority: Shakepay → Mastercard minimum → Wise weekly spending → Savings to $1,000 → remaining to RBC Visa
 - Applying a payday plan actually routes the money to those destinations instead of leaving it sitting in Chequing
 - Tip Wizard funds Shakepay first when needed, then RBC Visa
+- Home Next Action updates automatically as priorities are funded
+- Bills appear on Home and are editable from the Home Bills section
 - Data is stored locally in the browser
 
 ## GitHub Pages upload

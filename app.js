@@ -30,6 +30,49 @@ function render(){
   c.innerHTML={home:home,accounts:accounts,payday:payday,tips:tips,spending:spending}[state.activeTab]();
   bind();
 }
+function getNextAction(){
+ const shakeNeed=Math.max(0,419.23-state.accounts.shakepay);
+ const savingsNeed=Math.max(0,1000-state.accounts.savings);
+ const unpaid=state.bills.filter(b=>!b.paid);
+ const unpaidTotal=unpaid.reduce((s,b)=>s+b.amount,0);
+ const mastercardMin=state.accounts.mastercard>0 ? Math.min(50,state.accounts.mastercard) : 0;
+
+ if(shakeNeed>0){
+   return {
+     title:"Fund Shakepay",
+     detail:`${money(shakeNeed)} still needed for phone + insurance.`,
+     label:"Priority"
+   };
+ }
+ if(unpaidTotal>0){
+   const nextBill=unpaid.slice().sort((a,b)=>a.due.localeCompare(b.due))[0];
+   return {
+     title:`Fund ${nextBill.name}`,
+     detail:`${money(nextBill.amount)} • due ${nextBill.due}.`,
+     label:"Bill"
+   };
+ }
+ if(savingsNeed>0){
+   return {
+     title:"Build Savings",
+     detail:`${money(savingsNeed)} still needed to reach your $1,000 minimum.`,
+     label:"Priority"
+   };
+ }
+ if(mastercardMin>0){
+   return {
+     title:"Pay Mastercard",
+     detail:`Keep it locked • next payment target ${money(mastercardMin)}.`,
+     label:"Debt"
+   };
+ }
+ return {
+   title:"Attack RBC Visa",
+   detail:`Extra money can now go toward your active debt target.`,
+   label:"Next"
+ };
+}
+
 function home(){
  const unpaid=state.bills.filter(b=>!b.paid);
  const billDue=unpaid.reduce((s,b)=>s+b.amount,0);
@@ -42,9 +85,9 @@ function home(){
     <div class="metric"><span class="small">Savings minimum</span><b>${money(state.accounts.savings)}</b></div>
    </div>
  </div>
- <div class="card blue"><div class="row"><div><div class="eyebrow">Next action</div><div class="title" style="margin:4px 0">Fund Shakepay</div><div class="small">${money(Math.max(0,419.23-state.accounts.shakepay))} still needed for phone + insurance.</div></div><span class="pill bluepill">Priority</span></div></div>
- <div class="card"><div class="row"><div><div class="title">Bills</div><div class="small">${unpaid.length?`${unpaid.length} unpaid • ${money(billDue)}`:"All bills marked paid"}</div></div><span class="big">${money(billDue)}</span></div>
- ${unpaid.map(b=>`<div class="expense"><span>${esc(b.name)}<br><span class="small">${b.due}</span></span><span>${money(b.amount)} <button class="pill" data-paid="${b.id}">Mark paid</button></span></div>`).join("")}</div>
+ <div class="card blue"><div class="row"><div><div class="eyebrow">Next action</div><div class="title" style="margin:4px 0">${esc(getNextAction().title)}</div><div class="small">${esc(getNextAction().detail)}</div></div><span class="pill bluepill">${esc(getNextAction().label)}</span></div></div>
+ <div class="card"><div class="row"><div><div class="title">Bills</div><div class="small">${unpaid.length?`${unpaid.length} unpaid • ${money(billDue)}`:"All bills marked paid"}</div></div><div style="text-align:right"><button class="pill bluepill" id="editBills">Edit</button><div class="big">${money(billDue)}</div></div></div>
+ ${state.bills.map(b=>`<div class="expense"><span>${esc(b.name)}<br><span class="small">Due ${esc(b.due)} • ${b.paid?"Paid":"Pending"}</span></span><span>${money(b.amount)} <button class="pill" data-paid="${b.id}">${b.paid?"Paid":"Mark paid"}</button></span></div>`).join("")}</div>
  <div class="card"><div class="title">Credit cards</div>
    <div class="row"><span>RBC Visa</span><b>${money(state.accounts.rbc)}</b></div><div class="progress"><i style="width:${pct(state.accounts.rbc,5000)}%"></i></div>
    <div class="row" style="margin-top:12px"><span>Mastercard <span class="pill">LOCKED</span></span><b>${money(state.accounts.mastercard)}</b></div><div class="progress white"><i style="width:${pct(state.accounts.mastercard,5000)}%"></i></div>
@@ -96,6 +139,7 @@ function bind(){
  document.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>{state.activeTab=b.dataset.tab;save();render()});
  document.querySelectorAll("[data-paid]").forEach(b=>b.onclick=()=>{const bill=state.bills.find(x=>x.id===b.dataset.paid);if(bill){bill.paid=!bill.paid;save();render()}});
  const eb=document.getElementById("editBalances"); if(eb) eb.onclick=editBalances;
+ const ebl=document.getElementById("editBills"); if(ebl) ebl.onclick=editBills;
  const cp=document.getElementById("calcPay"); if(cp) cp.onclick=runPay;
  const ct=document.getElementById("calcTips"); if(ct) ct.onclick=runTips;
  const ae=document.getElementById("addExpense"); if(ae) ae.onclick=addExpense;
@@ -193,6 +237,47 @@ function editBalances(){
  document.getElementById("close").onclick=closeModal;
  document.getElementById("saveBalances").onclick=()=>{document.querySelectorAll(".bal").forEach(i=>{const n=parseFloat(i.value);if(Number.isFinite(n)&&n>=0)state.accounts[i.dataset.id]=n});save();closeModal();render()};
 }
+function editBills(){
+ showModal(`<button class="close" id="close">×</button>
+ <div class="eyebrow">Bills</div>
+ <div class="title">Edit your monthly bills</div>
+ <div class="small" style="margin-bottom:12px">Update amounts, due dates, and whether each bill is already paid.</div>
+ ${state.bills.map((b,i)=>`<div class="card" style="margin:9px 0">
+   <label class="label">Bill name</label><input class="input billName" data-i="${i}" value="${esc(b.name)}">
+   <div class="split" style="margin-top:9px">
+     <div><label class="label">Amount</label><input class="input billAmount" data-i="${i}" inputmode="decimal" value="${b.amount}"></div>
+     <div><label class="label">Due date</label><input class="input billDue" data-i="${i}" type="date" value="${esc(b.due)}"></div>
+   </div>
+   <label class="check"><input type="checkbox" class="billPaid" data-i="${i}" ${b.paid?"checked":""}> Paid</label>
+ </div>`).join("")}
+ <button class="btn" id="saveBills">Save bills</button>
+ <button class="btn secondary" id="addBill">+ Add bill</button>`);
+ document.getElementById("close").onclick=closeModal;
+ document.getElementById("saveBills").onclick=()=>{
+   document.querySelectorAll(".billName").forEach(i=>{
+     const idx=Number(i.dataset.i);
+     state.bills[idx].name=i.value.trim()||state.bills[idx].name;
+   });
+   document.querySelectorAll(".billAmount").forEach(i=>{
+     const idx=Number(i.dataset.i),n=parseFloat(i.value);
+     if(Number.isFinite(n)&&n>=0) state.bills[idx].amount=n;
+   });
+   document.querySelectorAll(".billDue").forEach(i=>{
+     const idx=Number(i.dataset.i);
+     if(i.value) state.bills[idx].due=i.value;
+   });
+   document.querySelectorAll(".billPaid").forEach(i=>{
+     state.bills[Number(i.dataset.i)].paid=i.checked;
+   });
+   save();closeModal();render();
+ };
+ document.getElementById("addBill").onclick=()=>{
+   state.bills.push({id:"bill-"+Date.now(),name:"New Bill",amount:0,due:new Date().toISOString().slice(0,10),paid:false,account:"chequing"});
+   save();
+   editBills();
+ };
+}
+
 function settings(){
  showModal(`<button class="close" id="close">×</button><div class="eyebrow">Settings</div><div class="title">RESET</div>
  <div class="notice">Black + white UI with a minor blue accent. Data is stored on this device in local storage.</div>
