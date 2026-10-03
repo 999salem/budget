@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050607">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RESET">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+<title>RESET — Finance</title>
+</head>
+<body>
+<div id="app">
+<header class="topbar">
+  <div><div class="brand">RESET</div><div class="subbrand">FINANCE RESET</div></div>
+  <button class="iconbtn" id="settingsBtn" aria-label="Settings">⚙</button>
+</header>
+
+<main id="content"></main>
+
+<nav class="nav">
+  <button data-tab="home" class="navbtn active"><span>⌂</span><small>Home</small></button>
+  <button data-tab="accounts" class="navbtn"><span>▤</span><small>Accounts</small></button>
+  <button data-tab="payday" class="navbtn"><span>▣</span><small>Payday</small></button>
+  <button data-tab="tips" class="navbtn"><span>ϟ</span><small>Tips</small></button>
+  <button data-tab="spending" class="navbtn"><span>▥</span><small>Spending</small></button>
+</nav>
+</div>
+
+<div class="modal hidden" id="modal">
+  <div class="modalbox" id="modalContent"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
