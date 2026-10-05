@@ -13,7 +13,7 @@ const initial={
   expenses:[],
   incomeLog:[],
   activeTab:"home",
-  reward:{name:"NHL 27",target:0,unlocked:false},
+  reward:{name:"NHL 27",target:0,unlocked:false},runway:{days:30,estimatedIncome:0,estimatedSpending:600,estimatedSavings:250},resetReason:"",
   mission:"Get through October without adding new credit card debt."
 };
 let state=load();
@@ -30,6 +30,13 @@ function render(){
   c.innerHTML={home:home,accounts:accounts,payday:payday,tips:tips,spending:spending}[state.activeTab]();
   bind();
 }
+function unpaidBillsTotal(){return state.bills.filter(b=>!b.paid).reduce((s,b)=>s+Number(b.amount||0),0)}
+function safeToSpend(){const bills=unpaidBillsTotal(),gap=Math.max(0,1000-state.accounts.savings),wise=Math.max(0,state.weeklyBudget-state.spentThisWeek);return Math.max(0,state.accounts.chequing-bills-gap-wise)}
+function debtUtilization(){return debt()/10000*100}
+function debtMilestone(){const ms=[90,80,70,60,50,40,30],u=debtUtilization(),next=ms.find(x=>u>x-10)||30,target=10000*(next/100);return {util:u,next,target,amountToGo:Math.max(0,debt()-target)}}
+function runway(){const income=Number(state.runway?.estimatedIncome||0),bills=unpaidBillsTotal(),spending=Number(state.runway?.estimatedSpending||600),savings=Number(state.runway?.estimatedSavings||250);return {income,bills,spending,savings,debtPotential:Math.max(0,income-bills-spending-savings)}}
+function haptic(){try{if(navigator.vibrate)navigator.vibrate(12)}catch(e){}}
+
 function getNextAction(){
  const shakeNeed=Math.max(0,419.23-state.accounts.shakepay);
  const savingsNeed=Math.max(0,1000-state.accounts.savings);
@@ -74,27 +81,17 @@ function getNextAction(){
 }
 
 function home(){
- const unpaid=state.bills.filter(b=>!b.paid);
- const billDue=unpaid.reduce((s,b)=>s+b.amount,0);
- const totalCards=state.accounts.rbc+state.accounts.mastercard;
- return `<div class="hero">
-   <div class="eyebrow">Current mission</div><div class="title">${esc(state.mission)}</div>
-   <div class="spacer"></div><div class="small">Total accessible cash</div><div class="money">${money(available())}</div>
-   <div class="grid2">
-    <div class="metric"><span class="small">Chequing</span><b>${money(state.accounts.chequing)}</b></div>
-    <div class="metric"><span class="small">Savings minimum</span><b>${money(state.accounts.savings)}</b></div>
-   </div>
- </div>
- <div class="card blue"><div class="row"><div><div class="eyebrow">Next action</div><div class="title" style="margin:4px 0">${esc(getNextAction().title)}</div><div class="small">${esc(getNextAction().detail)}</div></div><span class="pill bluepill">${esc(getNextAction().label)}</span></div></div>
- <div class="card"><div class="row"><div><div class="title">Bills</div><div class="small">${unpaid.length?`${unpaid.length} unpaid • ${money(billDue)}`:"All bills marked paid"}</div></div><div style="text-align:right"><button class="pill bluepill" id="editBills">Edit</button><div class="big">${money(billDue)}</div></div></div>
- ${state.bills.map(b=>`<div class="expense"><span>${esc(b.name)}<br><span class="small">Due ${esc(b.due)} • ${b.paid?"Paid":"Pending"}</span></span><span>${money(b.amount)} <button class="pill" data-paid="${b.id}">${b.paid?"Paid":"Mark paid"}</button></span></div>`).join("")}</div>
- <div class="card"><div class="title">Credit cards</div>
-   <div class="row"><span>RBC Visa</span><b>${money(state.accounts.rbc)}</b></div><div class="progress"><i style="width:${pct(state.accounts.rbc,5000)}%"></i></div>
-   <div class="row" style="margin-top:12px"><span>Mastercard <span class="pill">LOCKED</span></span><b>${money(state.accounts.mastercard)}</b></div><div class="progress white"><i style="width:${pct(state.accounts.mastercard,5000)}%"></i></div>
-   <div class="notice" style="margin-top:12px">Total card debt: <b>${money(totalCards)}</b> • ${((totalCards/10000)*100).toFixed(1)}% utilization.</div>
- </div>
- <div class="card"><div class="row"><div><div class="title">NHL 27 reward</div><div class="small">Cash purchase only. Keep it locked until bills and buffer are safe.</div></div><span class="pill">LOCKED</span></div></div>`;
+ const unpaid=state.bills.filter(b=>!b.paid),billDue=unpaidBillsTotal(),next=getNextAction(),safe=safeToSpend(),r=runway(),m=debtMilestone();
+ const rewardReady=state.accounts.savings>=1000&&state.bills.every(b=>b.paid)&&state.accounts.mastercard<=0;
+ return `<div class="hero"><div class="eyebrow">TODAY</div><div class="title">${esc(next.title)}</div><div class="small">${esc(next.detail)}</div><div class="actionline"><span class="pill bluepill">${esc(next.label)}</span><button class="pill" id="todayAction">VIEW PLAN</button></div></div>
+ <div class="card safe-card"><div class="eyebrow">SAFE TO SPEND</div><div class="money">${money(safe)}</div><div class="small">After upcoming bills, your $1,000 savings minimum, and this week's Wise budget.</div><div class="grid2" style="margin-top:12px"><div class="metric"><span class="small">Chequing</span><b>${money(state.accounts.chequing)}</b></div><div class="metric"><span class="small">Protected bills</span><b>${money(billDue)}</b></div></div></div>
+ <div class="card"><div class="row"><div><div class="eyebrow">NEXT 30 DAYS</div><div class="title">Your runway</div></div><span class="pill">Estimate</span></div><div class="split"><div class="metric"><span class="small">Expected income</span><b>${money(r.income)}</b></div><div class="metric"><span class="small">Bills</span><b>-${money(r.bills)}</b></div><div class="metric"><span class="small">Spending</span><b>-${money(r.spending)}</b></div><div class="metric"><span class="small">Savings</span><b>-${money(r.savings)}</b></div></div><div class="notice" style="margin-top:10px">Potential debt payment: <b>${money(r.debtPotential)}</b>. Estimates never become actual income until you enter it.</div><button class="btn secondary" id="editRunway">Edit 30-day estimates</button></div>
+ <div class="card"><div class="row"><div><div class="eyebrow">DEBT JOURNEY</div><div class="title">Total credit-card debt</div></div><b>${debtUtilization().toFixed(1)}%</b></div><div class="money">${money(debt())}<span class="small"> / $10,000</span></div><div class="progress"><i style="width:${debtUtilization()}%"></i></div><div class="milestones">${[90,80,70,60,50,40,30].map(x=>`<span class="${debtUtilization()<=x?'hit':''}">${x}%</span>`).join('')}</div><div class="notice">Next milestone: <b>${m.next}%</b> utilization • ${money(m.amountToGo)} to go.</div></div>
+ <div class="card"><div class="row"><div><div class="eyebrow">REWARD VAULT</div><div class="title">🏒 ${esc(state.reward.name)}</div></div><span class="pill ${rewardReady?'bluepill':''}">${rewardReady?'UNLOCKED':'LOCKED'}</span></div><div class="small">Cash purchase only.</div><div class="check"><span>${state.accounts.savings>=1000?'✓':'○'}</span> $1,000 savings minimum</div><div class="check"><span>${state.bills.every(b=>b.paid)?'✓':'○'}</span> All bills funded</div><div class="check"><span>${state.accounts.mastercard<=0?'✓':'○'}</span> Mastercard cleared</div><div class="check"><span>○</span> Purchase with cash, never credit</div></div>
+ <div class="card"><div class="row"><div><div class="title">Bills</div><div class="small">${unpaid.length?`${unpaid.length} pending • ${money(billDue)}`:'All bills marked paid'}</div></div><button class="pill bluepill" id="editBills">Edit</button></div>${state.bills.map(b=>`<div class="expense"><span>${esc(b.name)}<br><span class="small">Due ${esc(b.due)} • ${b.paid?'Paid':'Pending'}</span></span><span>${money(b.amount)} <button class="pill" data-paid="${b.id}">${b.paid?'Paid':'Mark paid'}</button></span></div>`).join('')}</div>
+ <button class="btn danger" id="resetPlan">I MESSED UP — RESET MY PLAN</button>`;
 }
+
 function accounts(){
  const rows=[
  ["cash","Cash","Emergency flexibility • don't automatically use for debt",state.accounts.cash],
@@ -140,6 +137,9 @@ function bind(){
  document.querySelectorAll("[data-paid]").forEach(b=>b.onclick=()=>{const bill=state.bills.find(x=>x.id===b.dataset.paid);if(bill){bill.paid=!bill.paid;save();render()}});
  const eb=document.getElementById("editBalances"); if(eb) eb.onclick=editBalances;
  const ebl=document.getElementById("editBills"); if(ebl) ebl.onclick=editBills;
+ const ta=document.getElementById("todayAction"); if(ta) ta.onclick=()=>{state.activeTab="payday";save();render();haptic()};
+ const er=document.getElementById("editRunway"); if(er) er.onclick=editRunway;
+ const rp=document.getElementById("resetPlan"); if(rp) rp.onclick=resetPlan;
  const cp=document.getElementById("calcPay"); if(cp) cp.onclick=runPay;
  const ct=document.getElementById("calcTips"); if(ct) ct.onclick=runTips;
  const ae=document.getElementById("addExpense"); if(ae) ae.onclick=addExpense;
@@ -236,6 +236,16 @@ function editBalances(){
  showModal(`<button class="close" id="close">×</button><div class="eyebrow">Edit balances</div><div class="title">Update your real numbers</div>${fields.map(([id,n])=>`<div style="margin:9px 0"><label class="label">${n}</label><input class="input bal" data-id="${id}" value="${state.accounts[id]}"></div>`).join("")}<button class="btn" id="saveBalances">Save balances</button>`);
  document.getElementById("close").onclick=closeModal;
  document.getElementById("saveBalances").onclick=()=>{document.querySelectorAll(".bal").forEach(i=>{const n=parseFloat(i.value);if(Number.isFinite(n)&&n>=0)state.accounts[i.dataset.id]=n});save();closeModal();render()};
+}
+function editRunway(){
+ showModal(`<button class="close" id="close">×</button><div class="eyebrow">30-day runway</div><div class="title">Edit estimates</div><div class="small">Planning estimates only. Actual income goes through Payday or Tips.</div><label class="label" style="margin-top:12px">Expected income</label><input class="input runIncome" inputmode="decimal" value="${state.runway.estimatedIncome}"><label class="label">Expected spending</label><input class="input runSpend" inputmode="decimal" value="${state.runway.estimatedSpending}"><label class="label">Expected savings</label><input class="input runSave" inputmode="decimal" value="${state.runway.estimatedSavings}"><button class="btn" id="saveRunway">Save estimates</button>`);
+ document.getElementById("close").onclick=closeModal;
+ document.getElementById("saveRunway").onclick=()=>{let a=parseFloat(document.querySelector(".runIncome").value),b=parseFloat(document.querySelector(".runSpend").value),c=parseFloat(document.querySelector(".runSave").value);if(Number.isFinite(a)&&a>=0)state.runway.estimatedIncome=a;if(Number.isFinite(b)&&b>=0)state.runway.estimatedSpending=b;if(Number.isFinite(c)&&c>=0)state.runway.estimatedSavings=c;save();closeModal();render()};
+}
+function resetPlan(){
+ showModal(`<button class="close" id="close">×</button><div class="eyebrow">RESET</div><div class="title">No judgment. Let's rebuild.</div><div class="small">Choose what happened. Your balances stay intact.</div><div class="list" style="margin-top:12px">${["Overspent","Unexpected bill","Lower paycheque","Used credit","Other"].map(x=>`<button class="btn secondary resetReason" data-reason="${x}">${x}</button>`).join("")}</div>`);
+ document.getElementById("close").onclick=closeModal;
+ document.querySelectorAll(".resetReason").forEach(b=>b.onclick=()=>{state.resetReason=b.dataset.reason;state.mission="Reset complete — follow the next action, one step at a time.";save();closeModal();render();haptic()});
 }
 function editBills(){
  showModal(`<button class="close" id="close">×</button>
